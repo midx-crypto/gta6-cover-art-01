@@ -3,101 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio — GTA 6-style cover art maker</title>
+<title>Vice Cover Studio — Make GTA 6 Cover Art</title>
 <link rel="stylesheet" href="style.css">
+<script type="module" src="src/main.js"></script>
 </head>
 <body>
-<header id="topbar">
+<header class="topbar">
   <div class="brand">
-    <span class="brand-mark">VI</span>
-    <span class="brand-name">VICE COVER STUDIO</span>
-    <span class="brand-sub">GTA 6-style cover art maker</span>
+    <span class="brand-mark">★</span>
+    <div>
+      <h1>VICE COVER STUDIO</h1>
+      <p>Turn your photos into a Vice City poster cover. Pick a layout, grade it, export the PNG.</p>
+    </div>
   </div>
   <div class="top-actions">
-    <button id="undoBtn" type="button" title="Undo (Ctrl+Z)">↩ Undo</button>
-    <button id="autoFillBtn" type="button" title="Fill panels with the best-fitting sample photos">Auto-fill panels</button>
-    <button id="exportBtn" type="button" class="primary">⬇ Export PNG</button>
+    <button id="undo" type="button" title="Undo (Ctrl+Z)">↩ Undo</button>
+    <button id="reset" type="button" title="Back to the default cover">Reset</button>
+    <button id="export" type="button" class="primary">⬇ Export PNG</button>
   </div>
 </header>
 
-<div id="app">
-  <aside id="controls">
-    <section class="panel" id="photosPanel">
-      <h2>1 · Photos</h2>
-      <p class="hint">Click a photo to put it in the selected panel. Click a panel on the cover to select it.</p>
-      <div id="sampleRow" class="thumbs"></div>
-      <label class="upload">
-        <input id="uploadInput" type="file" accept="image/*">
-        <span>＋ Upload your own photo</span>
-      </label>
-      <p class="hint small">Photos stay on your machine. They are never uploaded.</p>
-    </section>
+<main class="studio">
+  <section class="preview-wrap">
+    <canvas id="preview" width="960" height="540"></canvas>
+    <p class="hint">Click a panel to select it · drag inside it to move the photo · scroll to zoom · pick a photo below to fill it.</p>
+  </section>
 
-    <section class="panel">
-      <h2>2 · Layout</h2>
-      <div id="layoutRow" class="btn-grid"></div>
+  <aside class="controls">
+    <section>
+      <h2>Layout</h2>
+      <div id="layouts" class="segs"></div>
     </section>
-
-    <section class="panel">
-      <h2>3 · Colour grade</h2>
-      <div id="gradeRow" class="btn-grid"></div>
+    <section>
+      <h2>Colour grade</h2>
+      <div id="grades" class="segs"></div>
     </section>
-
-    <section class="panel">
-      <h2>4 · Export size</h2>
-      <div id="sizeRow" class="btn-grid"></div>
+    <section>
+      <h2>Export size</h2>
+      <div id="sizes" class="segs"></div>
     </section>
-
-    <section class="panel">
-      <h2>5 · Caption</h2>
-      <label>Title
-        <input id="titleInput" type="text" maxlength="28" value="NEON TIDE">
-      </label>
-      <label>Subtitle (script)
-        <input id="subtitleInput" type="text" maxlength="48" value="Six nights in paradise">
-      </label>
-      <label>Press quote
-        <input id="quoteInput" type="text" maxlength="48" value="A FEVER DREAM IN NEON">
-      </label>
-      <label>Quote source
-        <input id="sourceInput" type="text" maxlength="32" value="THE COAST HERALD">
-      </label>
-      <label>Star rating
-        <select id="starsInput">
+    <section>
+      <h2>Caption</h2>
+      <label>Title <input id="title" type="text" maxlength="24" value="NEON TIDE"></label>
+      <label>Subtitle <input id="subtitle" type="text" maxlength="48" value="Six nights in paradise"></label>
+      <label>Press quote <input id="quote" type="text" maxlength="80" value="A fever dream in neon — The Coast Herald"></label>
+      <label>Stars
+        <select id="stars">
           <option value="5" selected>★★★★★ (5)</option>
-          <option value="4">★★★★☆ (4)</option>
-          <option value="3">★★★☆☆ (3)</option>
+          <option value="4">★★★★ (4)</option>
+          <option value="3">★★★ (3)</option>
+          <option value="2">★★ (2)</option>
+          <option value="1">★ (1)</option>
         </select>
       </label>
     </section>
-
-    <section class="panel" id="panelPanel">
-      <h2>6 · Selected panel</h2>
-      <p class="hint" id="panelName">Panel 1 · Hero</p>
-      <label>Place label
-        <input id="placeInput" type="text" maxlength="24">
+    <section>
+      <h2 id="panel-name">Panel 1</h2>
+      <label>Place <input id="place" type="text" maxlength="24"></label>
+      <label>Time <input id="time" type="text" maxlength="12"></label>
+      <label>Tagline <input id="tag" type="text" maxlength="32"></label>
+      <label>Zoom <input id="zoom" type="range" min="1" max="3" step="0.05" value="1"></label>
+      <label>Pan X <input id="panx" type="range" min="-1" max="1" step="0.05" value="0"></label>
+      <label>Pan Y <input id="pany" type="range" min="-1" max="1" step="0.05" value="0"></label>
+      <button id="fill-all" type="button">Fill all panels with this photo</button>
+    </section>
+    <section>
+      <h2>Photos</h2>
+      <div id="photos" class="thumbs"></div>
+      <label class="upload-btn">＋ Upload your own photo
+        <input id="upload" type="file" accept="image/*">
       </label>
-      <label>Time
-        <input id="timeInput" type="text" maxlength="12">
-      </label>
-      <label>Tagline
-        <input id="tagInput" type="text" maxlength="28">
-      </label>
-      <label>Zoom
-        <input id="zoomInput" type="range" min="1" max="3" step="0.05" value="1">
-      </label>
-      <p class="hint small">Drag the photo inside a panel to move it. Scroll over a panel to zoom.</p>
+      <p class="fine">Photos are read on your machine and never uploaded. Sample photos are AI-generated; the app is a fan-made poster maker, not affiliated with Rockstar Games.</p>
     </section>
   </aside>
+</main>
 
-  <main id="stage">
-    <div id="canvasWrap">
-      <canvas id="preview"></canvas>
-      <div id="stageHint">Click a panel to select it · drag to reposition the photo · scroll to zoom</div>
-    </div>
-  </main>
-</div>
-
-<script type="module" src="src/main.js"></script>
+<canvas id="shot" hidden></canvas>
+<div id="selftest" hidden></div>
 </body>
 </html>
