@@ -1,369 +1,359 @@
-// Vice Cover Studio — editor wiring.
-// Pick photos, crop-position each panel, edit the caption, export a PNG.
-// All photos stay on this machine: samples are local files, uploads are read
-// with FileReader/object URLs and never sent anywhere.
+// Vice Cover Studio — editor wiring: state, undo, drag/zoom crop,
+// uploads, export, self-test and fixed screenshot scenes.
+import { SAMPLES, LAYOUTS, GRADES, EXPORT_SIZES, defaultState, layoutPanels, drawCover } from './cover.js';
+import { applyShot, shotCanvasSize, markShotReady } from './shots.js';
 
-import { GRADES, LAYOUTS, SIZES, layoutRects, drawCover } from './cover.js';
+const $ = (id) => document.getElementById(id);
+const canvas = $('cover');
+const ctx = canvas.getContext('2d');
+const query = new URLSearchParams(location.search);
+const state = defaultState();
+const shot = applyShot(query, state);
 
-const SAMPLES = [
-  { id: 'convertible', src: 'samples/convertible.jpg', label: 'Convertible' },
-  { id: 'neon-portrait', src: 'samples/neon-portrait.jpg', label: 'Neon Portrait' },
-  { id: 'coast-road', src: 'samples/coast-road.jpg', label: 'Coast Road' },
-  { id: 'gas-station', src: 'samples/gas-station.jpg', label: 'Gas Station' },
-  { id: 'boulevard', src: 'samples/boulevard.jpg', label: 'Boulevard' },
-  { id: 'pier', src: 'samples/pier.jpg', label: 'Pier' },
-];
-
-const DEFAULT_PANELS = [
-  { src: 'samples/convertible.jpg', px: 0, py: 0, zoom: 1, place: 'Neon Row', time: '9:12 PM', tag: 'No witnesses' },
-  { src: 'samples/coast-road.jpg', px: 0, py: 0, zoom: 1, place: 'Coast Highway', time: '7:40 PM', tag: 'Last light' },
-  { src: 'samples/pier.jpg', px: 0, py: 0, zoom: 1, place: 'Pier 39', time: '6:05 AM', tag: 'Empty nets' },
-  { src: 'samples/gas-station.jpg', px: 0, py: 0, zoom: 1, place: 'Gas & Go', time: '11:47 PM', tag: 'Full tank, no plan' },
-];
-
-function defaultState() {
-  return {
-    layout: 'hero-top',
-    grade: 'sunset',
-    size: 'landscape',
-    title: 'NEON TIDE',
-    subtitle: 'Six nights in paradise',
-    quote: 'A fever dream in neon — The Coast Herald',
-    stars: 5,
-    panels: DEFAULT_PANELS.map((p) => ({ ...p })),
-  };
-}
-
-const params = new URLSearchParams(location.search);
-const shot = params.get('shot');
-const selftest = params.get('selftest') === '1';
-
-let state = defaultState();
-let selected = 0;
+const images = new Map(); // id -> HTMLImageElement
+const customLabels = new Map(); // upload id -> {place,time,tag}
+let uploadCount = 0;
 let history = [];
-const images = new Map(); // src -> HTMLImageElement
-const customPhotos = []; // uploaded {src, label}
+let drag = null;
+let wheelTimer = null;
+let errors = 0;
+window.addEventListener('error', () => { errors++; });
 
 function loadImage(src) {
-  if (images.has(src)) return Promise.resolve(images.get(src));
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => { images.set(src, img); resolve(img); };
-    img.onerror = () => { images.set(src, null); resolve(null); };
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('load failed: ' + src));
     img.src = src;
   });
 }
 
-async function loadFonts() {
-  try {
-    const anton = new FontFace('Anton', "url('fonts/Anton-Regular.ttf')");
-    const pacifico = new FontFace('Pacifico', "url('fonts/Pacifico-Regular.ttf')");
-    await Promise.all([anton.load(), pacifico.load()]);
-    document.fonts.add(anton);
-    document.fonts.add(pacifico);
-  } catch (e) { /* fall back to system fonts; the cover still draws */ }
-  await document.fonts.ready.catch(() => {});
-}
-
-// ---- state helpers -------------------------------------------------------
-
-function snapshot() {
-  return JSON.stringify(state);
-}
-
-function restore(json) {
-  state = JSON.parse(json);
-  syncControls();
-  renderPreview();
-}
-
 function pushHistory() {
-  history.push(snapshot());
-  if (history.length > 50) history.shift();
+  history.push(JSON.stringify(state));
+  if (history.length > 60) history.shift();
 }
 
 function undo() {
   const prev = history.pop();
-  if (prev) restore(prev);
-}
-
-function stateWithImages() {
-  return {
-    ...state,
-    panels: state.panels.map((p) => ({ ...p, img: images.get(p.src) || null })),
-  };
+  if (!prev) return;
+  const keep = state.selected;
+  Object.assign(state, JSON.parse(prev));
+  state.selected = keep;
+  syncControls();
+  render();
 }
 
 function currentSize() {
-  return SIZES.find((s) => s.id === state.size) || SIZES[2];
+  const s = EXPORT_SIZES.find((x) => x.id === state.exportSize) || EXPORT_SIZES[0];
+  return s;
 }
 
-// ---- preview -------------------------------------------------------------
-
-const preview = document.getElementById('preview');
-const pctx = preview.getContext('2d');
-
-function renderPreview() {
-  const size = currentSize();
-  const maxW = size.w >= size.h ? 960 : 720;
-  const scale = maxW / size.w;
-  preview.width = Math.round(size.w * scale);
-  preview.height = Math.round(size.h * scale);
-  drawCover(pctx, stateWithImages(), preview.width, preview.height);
+function render() {
+  let W, H;
+  if (shot === 'cover') {
+    W = window.innerWidth; H = window.innerHeight;
+  } else {
+    const s = currentSize();
+    W = s.w; H = s.h;
+  }
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  drawCover(ctx, state, images, W, H);
   drawSelection();
 }
 
 function drawSelection() {
-  if (shot) return;
-  const rects = layoutRects(state.layout);
-  const layout = LAYOUTS.find((l) => l.id === state.layout) || LAYOUTS[0];
-  const n = layout.panels;
-  const gap = Math.max(2, preview.width * 0.004);
-  pctx.save();
-  for (let i = 0; i < n; i++) {
-    const [fx, fy, fw, fh] = rects[i];
-    const x = fx * preview.width, y = fy * preview.height;
-    const w = fw * preview.width, h = fh * preview.height;
-    pctx.strokeStyle = i === selected ? '#ffd166' : 'rgba(255,255,255,0.35)';
-    pctx.lineWidth = i === selected ? 3 : 1;
-    if (state.layout === 'slash') {
-      const slant = preview.width * 0.045;
-      pctx.beginPath();
-      pctx.moveTo(x + (i === 0 ? 0 : slant), 0);
-      pctx.lineTo(x + fw * preview.width + slant, 0);
-      pctx.lineTo(x + fw * preview.width - (i === 2 ? 0 : slant), preview.height);
-      pctx.lineTo(x - slant, preview.height);
-      pctx.closePath();
-      pctx.stroke();
-    } else {
-      pctx.strokeRect(x + gap / 2, y + gap / 2, w - gap, h - gap);
+  if (shot === 'cover') return;
+  const panels = layoutPanels(state.layout, canvas.width, canvas.height);
+  const p = panels[state.selected];
+  if (!p) return;
+  ctx.save();
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 4;
+  ctx.setLineDash([14, 8]);
+  if (p.poly) {
+    ctx.beginPath();
+    ctx.moveTo(p.poly[0][0], p.poly[0][1]);
+    for (let k = 1; k < p.poly.length; k++) ctx.lineTo(p.poly[k][0], p.poly[k][1]);
+    ctx.closePath();
+  } else {
+    ctx.strokeRect(p.x + 2, p.y + 2, p.w - 4, p.h - 4);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function pointInPanel(px, py, p) {
+  if (p.poly) {
+    let inside = false;
+    for (let i = 0, j = p.poly.length - 1; i < p.poly.length; j = i++) {
+      const xi = p.poly[i][0], yi = p.poly[i][1];
+      const xj = p.poly[j][0], yj = p.poly[j][1];
+      if (((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)) inside = !inside;
     }
+    return inside;
   }
-  pctx.restore();
+  return px >= p.x && px <= p.x + p.w && py >= p.y && py <= p.y + p.h;
 }
 
-function hitPanel(clientX, clientY) {
-  const r = preview.getBoundingClientRect();
-  const x = (clientX - r.left) * (preview.width / r.width);
-  const y = (clientY - r.top) * (preview.height / r.height);
-  const rects = layoutRects(state.layout);
-  const layout = LAYOUTS.find((l) => l.id === state.layout) || LAYOUTS[0];
-  for (let i = layout.panels - 1; i >= 0; i--) {
-    const [fx, fy, fw, fh] = rects[i];
-    if (x >= fx * preview.width && x <= (fx + fw) * preview.width
-      && y >= fy * preview.height && y <= (fy + fh) * preview.height) return i;
-  }
-  return 0;
+function canvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * (canvas.width / r.width),
+    y: (e.clientY - r.top) * (canvas.height / r.height),
+  };
 }
 
-// ---- export --------------------------------------------------------------
-
-function renderExport(sizeId) {
-  const size = SIZES.find((s) => s.id === sizeId) || currentSize();
-  const canvas = document.createElement('canvas');
-  canvas.width = size.w; canvas.height = size.h;
-  drawCover(canvas.getContext('2d'), stateWithImages(), size.w, size.h);
-  return { canvas, size };
-}
-
-function exportPNG() {
-  const { canvas, size } = renderExport(state.size);
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `vice-cover-${size.w}x${size.h}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  }, 'image/png');
-}
-
-// ---- controls ------------------------------------------------------------
-
-const $ = (id) => document.getElementById(id);
-
-function segmented(el, items, current, onPick) {
-  el.innerHTML = '';
-  for (const item of items) {
+// --- controls ---
+function buildControls() {
+  const layoutBox = $('layouts');
+  Object.entries(LAYOUTS).forEach(([id, def]) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'seg' + (item.id === current ? ' on' : '');
-    b.textContent = item.name;
-    b.addEventListener('click', () => { pushHistory(); onPick(item.id); renderPreview(); syncControls(); });
-    el.appendChild(b);
-  }
-}
-
-function syncControls() {
-  segmented($('layouts'), LAYOUTS, state.layout, (id) => { state.layout = id; selected = 0; });
-  segmented($('grades'), GRADES, state.grade, (id) => { state.grade = id; });
-  segmented($('sizes'), SIZES, state.size, (id) => { state.size = id; });
-  $('title').value = state.title;
-  $('subtitle').value = state.subtitle;
-  $('quote').value = state.quote;
-  $('stars').value = String(state.stars);
-  const p = state.panels[selected] || {};
-  $('panel-name').textContent = `Panel ${selected + 1} — ${p.place || 'untitled'}`;
-  $('place').value = p.place || '';
-  $('time').value = p.time || '';
-  $('tag').value = p.tag || '';
-  $('zoom').value = String(p.zoom || 1);
-  $('panx').value = String(p.px || 0);
-  $('pany').value = String(p.py || 0);
-  document.querySelectorAll('#photos .thumb').forEach((t) => {
-    t.classList.toggle('on', t.dataset.src === p.src);
+    b.className = 'chip';
+    b.textContent = def.name;
+    b.dataset.layout = id;
+    b.addEventListener('click', () => { pushHistory(); state.layout = id; state.selected = 0; syncControls(); render(); });
+    layoutBox.appendChild(b);
   });
-}
 
-function buildPhotoStrip() {
-  const strip = $('photos');
-  strip.innerHTML = '';
-  const all = [...SAMPLES, ...customPhotos];
-  for (const ph of all) {
+  const gradeBox = $('grades');
+  Object.entries(GRADES).forEach(([id, def]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch';
+    b.dataset.grade = id;
+    b.title = def.name;
+    b.style.background = `linear-gradient(135deg, ${def.wash[0]}, ${def.wash[1]})`;
+    b.innerHTML = `<span>${def.name}</span>`;
+    b.addEventListener('click', () => { pushHistory(); state.grade = id; syncControls(); render(); });
+    gradeBox.appendChild(b);
+  });
+
+  const sizeSel = $('exportSize');
+  EXPORT_SIZES.forEach((s) => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.label;
+    sizeSel.appendChild(o);
+  });
+  sizeSel.addEventListener('change', () => { pushHistory(); state.exportSize = sizeSel.value; render(); });
+
+  const thumbBox = $('thumbs');
+  SAMPLES.forEach((s) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'thumb';
-    b.dataset.src = ph.src;
-    b.title = ph.label;
+    b.dataset.sample = s.id;
+    b.title = `${s.place} - ${s.tag}`;
     const img = document.createElement('img');
-    img.src = ph.src;
-    img.alt = ph.label;
+    img.src = s.src; img.alt = s.place;
     b.appendChild(img);
     b.addEventListener('click', () => {
       pushHistory();
-      state.panels[selected].src = ph.src;
-      loadImage(ph.src).then(renderPreview);
-      syncControls();
+      state.panels[state.selected].img = s.id;
+      state.panels[state.selected].dx = 0;
+      state.panels[state.selected].dy = 0;
+      state.panels[state.selected].scale = 1;
+      delete state.panels[state.selected].label;
+      syncControls(); render();
     });
-    strip.appendChild(b);
-  }
+    thumbBox.appendChild(b);
+  });
 }
 
-function bindControls() {
-  $('title').addEventListener('input', (e) => { state.title = e.target.value; renderPreview(); });
-  $('title').addEventListener('change', pushHistory);
-  $('subtitle').addEventListener('input', (e) => { state.subtitle = e.target.value; renderPreview(); });
-  $('subtitle').addEventListener('change', pushHistory);
-  $('quote').addEventListener('input', (e) => { state.quote = e.target.value; renderPreview(); });
-  $('quote').addEventListener('change', pushHistory);
-  $('stars').addEventListener('change', (e) => { pushHistory(); state.stars = Number(e.target.value); renderPreview(); });
-  $('place').addEventListener('input', (e) => { state.panels[selected].place = e.target.value; renderPreview(); });
-  $('place').addEventListener('change', pushHistory);
-  $('time').addEventListener('input', (e) => { state.panels[selected].time = e.target.value; renderPreview(); });
-  $('time').addEventListener('change', pushHistory);
-  $('tag').addEventListener('input', (e) => { state.panels[selected].tag = e.target.value; renderPreview(); });
-  $('tag').addEventListener('change', pushHistory);
-  $('zoom').addEventListener('input', (e) => { state.panels[selected].zoom = Number(e.target.value); renderPreview(); });
+function bindText(id, key) {
+  $(id).addEventListener('input', (e) => { state[key] = e.target.value; render(); });
+  $(id).addEventListener('change', pushHistory);
+}
+
+function syncControls() {
+  document.querySelectorAll('#layouts .chip').forEach((b) => b.classList.toggle('active', b.dataset.layout === state.layout));
+  document.querySelectorAll('#grades .swatch').forEach((b) => b.classList.toggle('active', b.dataset.grade === state.grade));
+  document.querySelectorAll('#thumbs .thumb').forEach((b) => b.classList.toggle('active', b.dataset.sample === state.panels[state.selected].img));
+  $('title').value = state.title;
+  $('subtitle').value = state.subtitle;
+  $('quote').value = state.quote;
+  $('stars').value = state.stars;
+  $('starsOut').textContent = state.stars + ' / 5';
+  $('vol').value = state.vol;
+  $('wanted').checked = state.wanted;
+  $('seal').checked = state.seal;
+  $('strip').checked = state.strip;
+  $('exportSize').value = state.exportSize;
+  $('zoom').value = Math.round(((state.panels[state.selected].scale || 1) - 1) * 100);
+  $('zoomOut').textContent = Math.round((state.panels[state.selected].scale || 1) * 100) + '%';
+  $('panelLabel').textContent = 'Panel ' + (state.selected + 1) + ' of ' + LAYOUTS[state.layout].panels;
+}
+
+function bindUI() {
+  bindText('title', 'title');
+  bindText('subtitle', 'subtitle');
+  bindText('quote', 'quote');
+  bindText('vol', 'vol');
+  $('stars').addEventListener('input', (e) => { state.stars = Number(e.target.value); $('starsOut').textContent = state.stars + ' / 5'; render(); });
+  $('stars').addEventListener('change', pushHistory);
+  $('wanted').addEventListener('change', (e) => { pushHistory(); state.wanted = e.target.checked; render(); });
+  $('seal').addEventListener('change', (e) => { pushHistory(); state.seal = e.target.checked; render(); });
+  $('strip').addEventListener('change', (e) => { pushHistory(); state.strip = e.target.checked; render(); });
+  $('zoom').addEventListener('input', (e) => {
+    const spec = state.panels[state.selected];
+    spec.scale = 1 + Number(e.target.value) / 100;
+    $('zoomOut').textContent = Math.round(spec.scale * 100) + '%';
+    render();
+  });
   $('zoom').addEventListener('change', pushHistory);
-  $('panx').addEventListener('input', (e) => { state.panels[selected].px = Number(e.target.value); renderPreview(); });
-  $('panx').addEventListener('change', pushHistory);
-  $('pany').addEventListener('input', (e) => { state.panels[selected].py = Number(e.target.value); renderPreview(); });
-  $('pany').addEventListener('change', pushHistory);
+  $('resetCrop').addEventListener('click', () => {
+    pushHistory();
+    const spec = state.panels[state.selected];
+    spec.dx = 0; spec.dy = 0; spec.scale = 1;
+    syncControls(); render();
+  });
   $('undo').addEventListener('click', undo);
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   });
-  $('export').addEventListener('click', exportPNG);
-  $('fill-all').addEventListener('click', () => {
-    pushHistory();
-    const src = state.panels[selected].src;
-    state.panels.forEach((p) => { p.src = src; });
-    renderPreview(); syncControls();
-  });
-  $('reset').addEventListener('click', () => {
-    pushHistory();
-    state = defaultState(); selected = 0;
-    Promise.all(state.panels.map((p) => loadImage(p.src))).then(() => { renderPreview(); syncControls(); });
-  });
-  $('upload').addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
+  $('upload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    const label = file.name.replace(/\.[^.]+$/, '') || 'Upload';
-    customPhotos.push({ src: url, label });
-    pushHistory();
-    state.panels[selected].src = url;
-    loadImage(url).then(() => { buildPhotoStrip(); renderPreview(); syncControls(); });
+    try {
+      const img = await loadImage(URL.createObjectURL(file));
+      uploadCount++;
+      const id = 'upload-' + uploadCount;
+      images.set(id, img);
+      customLabels.set(id, { place: 'Your Photo', time: 'Just Now', tag: file.name.replace(/\.[^.]+$/, '').slice(0, 24) || 'Uploaded' });
+      pushHistory();
+      const spec = state.panels[state.selected];
+      spec.img = id; spec.dx = 0; spec.dy = 0; spec.scale = 1;
+      spec.label = customLabels.get(id);
+      $('status').textContent = 'Uploaded ' + file.name + ' into panel ' + (state.selected + 1) + '.';
+      syncControls(); render();
+    } catch (err) {
+      $('status').textContent = 'Upload failed: ' + err.message;
+    }
     e.target.value = '';
   });
+  $('export').addEventListener('click', () => {
+    const s = currentSize();
+    const off = document.createElement('canvas');
+    off.width = s.w; off.height = s.h;
+    drawCover(off.getContext('2d'), state, images, s.w, s.h);
+    off.toBlob((blob) => {
+      if (!blob) { $('status').textContent = 'Export failed.'; return; }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `vice-cover-${s.w}x${s.h}.png`;
+      a.click();
+      $('status').textContent = `Saved vice-cover-${s.w}x${s.h}.png`;
+    }, 'image/png');
+  });
 
-  // Drag to pan the selected panel, wheel to zoom it.
-  let drag = null;
-  preview.addEventListener('pointerdown', (e) => {
+  // drag to pan crop, wheel to zoom, click to select panel
+  canvas.addEventListener('pointerdown', (e) => {
+    const pt = canvasPoint(e);
+    const panels = layoutPanels(state.layout, canvas.width, canvas.height);
+    let hit = -1;
+    for (let i = panels.length - 1; i >= 0; i--) {
+      if (pointInPanel(pt.x, pt.y, panels[i])) { hit = i; break; }
+    }
+    if (hit < 0) return;
     pushHistory();
-    selected = hitPanel(e.clientX, e.clientY);
+    state.selected = hit;
     syncControls();
-    drag = { x: e.clientX, y: e.clientY };
-    preview.setPointerCapture(e.pointerId);
-    renderPreview();
+    drag = { x: pt.x, y: pt.y, dx: state.panels[hit].dx, dy: state.panels[hit].dy };
+    canvas.setPointerCapture(e.pointerId);
+    render();
   });
-  preview.addEventListener('pointermove', (e) => {
+  canvas.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const r = preview.getBoundingClientRect();
-    const dx = (e.clientX - drag.x) * (preview.width / r.width);
-    const dy = (e.clientY - drag.y) * (preview.height / r.height);
-    drag = { x: e.clientX, y: e.clientY };
-    const p = state.panels[selected];
-    p.px = Math.max(-1, Math.min(1, (p.px || 0) + (dx / preview.width) * 2));
-    p.py = Math.max(-1, Math.min(1, (p.py || 0) + (dy / preview.height) * 2));
-    renderPreview();
-    $('panx').value = String(p.px); $('pany').value = String(p.py);
+    const pt = canvasPoint(e);
+    const p = layoutPanels(state.layout, canvas.width, canvas.height)[state.selected];
+    const spec = state.panels[state.selected];
+    spec.dx = Math.max(-1, Math.min(1, drag.dx + (pt.x - drag.x) / p.w));
+    spec.dy = Math.max(-1, Math.min(1, drag.dy + (pt.y - drag.y) / p.h));
+    render();
   });
-  preview.addEventListener('pointerup', () => { drag = null; });
-  preview.addEventListener('wheel', (e) => {
+  canvas.addEventListener('pointerup', () => { drag = null; });
+  canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    pushHistory();
-    const p = state.panels[selected];
-    p.zoom = Math.max(1, Math.min(3, (p.zoom || 1) * (1 - e.deltaY * 0.001)));
-    $('zoom').value = String(p.zoom);
-    renderPreview();
+    const pt = canvasPoint(e);
+    const panels = layoutPanels(state.layout, canvas.width, canvas.height);
+    let hit = -1;
+    for (let i = panels.length - 1; i >= 0; i--) {
+      if (pointInPanel(pt.x, pt.y, panels[i])) { hit = i; break; }
+    }
+    if (hit < 0) return;
+    if (!wheelTimer) pushHistory();
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => { wheelTimer = null; }, 600);
+    const spec = state.panels[hit];
+    spec.scale = Math.max(1, Math.min(4, (spec.scale || 1) * Math.pow(1.0015, -e.deltaY)));
+    state.selected = hit;
+    syncControls(); render();
   }, { passive: false });
 }
 
-// ---- shot mode: full-screen cover for screenshots -------------------------
-
-async function runShot() {
-  document.body.classList.add('shot');
-  const size = shot === 'portrait' ? SIZES[1] : shot === 'square' ? SIZES[0] : SIZES[2];
-  const canvas = document.getElementById('shot');
-  canvas.width = size.w; canvas.height = size.h;
-  await loadFonts();
-  await Promise.all(state.panels.map((p) => loadImage(p.src)));
-  drawCover(canvas.getContext('2d'), stateWithImages(), size.w, size.h);
-  document.title = `Vice Cover Studio — ${shot} ${size.w}x${size.h}`;
-}
-
-// ---- self-test: render all 3 sizes, report into the DOM ------------------
-
-async function runSelfTest() {
+// --- self-test: ?selftest=1 ---
+async function selftest() {
   const results = [];
-  for (const size of SIZES) {
-    const { canvas } = renderExport(size.id);
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
-    const px = canvas.getContext('2d').getImageData(Math.floor(size.w / 2), Math.floor(size.h / 2), 1, 1).data;
-    const nonBlank = px[0] + px[1] + px[2] > 30;
-    results.push({ size: `${size.w}x${size.h}`, bytes: blob ? blob.size : 0, nonBlank });
+  try {
+    const anton = await document.fonts.load('40px Anton');
+    const pacifico = await document.fonts.load('40px Pacifico');
+    results.push('fonts:' + (anton.length > 0 && pacifico.length > 0 ? 'ok' : 'MISSING'));
+    const missing = SAMPLES.filter((s) => !images.get(s.id) || !images.get(s.id).naturalWidth);
+    results.push('samples:' + (missing.length === 0 ? 'ok' : 'MISSING ' + missing.map((m) => m.id).join(',')));
+    const off = document.createElement('canvas');
+    off.width = 360; off.height = 360;
+    const octx = off.getContext('2d');
+    let combos = 0;
+    for (const layout of Object.keys(LAYOUTS)) {
+      for (const grade of Object.keys(GRADES)) {
+        drawCover(octx, { ...state, layout, grade }, images, 360, 360);
+        combos++;
+      }
+    }
+    results.push('combos:' + combos);
+    for (const s of EXPORT_SIZES) {
+      const c2 = document.createElement('canvas');
+      c2.width = s.w; c2.height = s.h;
+      drawCover(c2.getContext('2d'), state, images, s.w, s.h);
+    }
+    results.push('exports:ok');
+    results.push('errors:' + errors);
+  } catch (err) {
+    results.push('EXCEPTION ' + err.message);
   }
-  const ok = results.every((r) => r.bytes > 10000 && r.nonBlank);
-  const text = JSON.stringify({ ok, results });
-  $('selftest').textContent = text;
-  document.title = `SELFTEST ${ok ? 'PASS' : 'FAIL'} ${text}`;
+  const pass = results.every((r) => !/MISSING|EXCEPTION/.test(r)) && errors === 0;
+  const text = (pass ? 'SELFTEST PASS' : 'SELFTEST FAIL') + ' | ' + results.join(' | ');
+  const el = $('selftest');
+  if (el) el.textContent = text;
+  document.title = text;
+  window.__selftest = text;
+  return pass;
 }
 
-// ---- init ------------------------------------------------------------------
-
-async function init() {
-  if (shot && shot !== 'editor') {
-    await runShot();
-    return;
+// --- boot ---
+async function boot() {
+  try {
+    await Promise.all([
+      document.fonts.load('40px Anton'),
+      document.fonts.load('40px Pacifico'),
+      ...SAMPLES.map(async (s) => {
+        try { images.set(s.id, await loadImage(s.src)); } catch (e) { /* placeholder gradient */ }
+      }),
+    ]);
+  } catch (e) { /* fonts may fall back; render anyway */ }
+  if (shot !== 'cover') { buildControls(); bindUI(); }
+  if (shot === 'cover') {
+    const size = shotCanvasSize(shot, query);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    void size;
   }
-  buildPhotoStrip();
-  bindControls();
   syncControls();
-  await loadFonts();
-  await Promise.all(SAMPLES.map((s) => loadImage(s.src)));
-  renderPreview();
-  if (selftest) await runSelfTest();
+  render();
+  if (query.get('selftest') === '1') {
+    await selftest();
+  }
+  if (shot) markShotReady();
 }
 
-init();
+boot();
