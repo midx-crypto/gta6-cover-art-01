@@ -3,92 +3,112 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio — GTA 6-style cover art maker</title>
-<link rel="icon" href="data:,">
+<title>NEON PALMS — Leonida Cover Studio</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><span class="brand-mark">VC</span> VICE COVER STUDIO</div>
-  <p class="tagline">Build your own GTA 6-style cover art — multi-panel collage, giant 3D title, neon grades.</p>
-</header>
-<main class="app">
-  <section class="controls" aria-label="Cover controls">
-    <h1>Make your cover</h1>
+<main class="studio">
+  <section class="col col-left" aria-label="Photos, layout, grade and caption">
+    <header class="brand">
+      <h1>NEON PALMS</h1>
+      <p class="brand-sub">Leonida cover studio · one last summer</p>
+    </header>
 
-    <fieldset>
-      <legend>Layout</legend>
-      <div class="btn-row">
-        <button type="button" data-layout="hero-top">Hero Top</button>
-        <button type="button" data-layout="hero-left">Hero Left</button>
-        <button type="button" data-layout="slash">Slash Cut</button>
-        <button type="button" data-layout="three-panel">Three Panel</button>
-        <button type="button" data-layout="four-square">Four Square</button>
-        <button type="button" data-layout="portrait-stack">Portrait Stack</button>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Colour grade</legend>
-      <div class="btn-row">
-        <button type="button" data-grade="sunset">Vice Sunset</button>
-        <button type="button" data-grade="neon">Neon Night</button>
-        <button type="button" data-grade="gold">Gold Hour</button>
-        <button type="button" data-grade="magenta">Magenta Dusk</button>
-        <button type="button" data-grade="teal">Teal Noir</button>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Words</legend>
-      <label>Title <input id="title" type="text" maxlength="24" value="VICE CITY"></label>
-      <label>Subtitle (script) <input id="subtitle" type="text" maxlength="32" value="welcome back"></label>
-      <label>Quote <input id="quote" type="text" maxlength="60" value="The city never sleeps. Neither do we."></label>
-      <label>Stars
-        <select id="stars">
-          <option value="5" selected>★★★★★</option>
-          <option value="4">★★★★☆</option>
-          <option value="3">★★★☆☆</option>
-        </select>
+    <section class="panel-block">
+      <h2>Photos</h2>
+      <label class="add-photos">Add photos
+        <input id="addPhotos" type="file" accept="image/*" multiple>
       </label>
-    </fieldset>
+      <p class="hint">Click a photo to put it in the selected panel. Your photos never leave this machine.</p>
+      <div id="thumbs" class="thumbs"></div>
+    </section>
 
-    <fieldset>
-      <legend>Badges</legend>
-      <label class="check"><input id="showSeal" type="checkbox" checked> Seal badge</label>
-      <label class="check"><input id="showWanted" type="checkbox" checked> WANTED pill</label>
-      <label class="check"><input id="showVol" type="checkbox" checked> VOL. 06 badge</label>
-      <label class="check"><input id="showStrip" type="checkbox" checked> Bottom strip</label>
-      <label class="check"><input id="showQuote" type="checkbox" checked> Stars + quote</label>
-    </fieldset>
+    <section class="panel-block">
+      <h2>Layout</h2>
+      <div id="layouts" class="layouts"></div>
+    </section>
 
-    <fieldset>
-      <legend>Panels</legend>
-      <p class="hint">Click a panel to select it. Drag it on the canvas to reframe, scroll over it to zoom.</p>
-      <div id="panels"></div>
-    </fieldset>
+    <section class="panel-block">
+      <h2>Colour grade</h2>
+      <div id="grades" class="grades"></div>
+    </section>
 
-    <fieldset>
-      <legend>Export</legend>
-      <label>Size
-        <select id="size">
-          <option value="1080x1080" selected>1080 × 1080 (square)</option>
-          <option value="1080x1350">1080 × 1350 (portrait)</option>
-          <option value="1920x1080">1920 × 1080 (wide)</option>
-        </select>
-      </label>
-      <div class="btn-row">
-        <button id="undo" type="button">Undo</button>
-        <button id="export" type="button" class="primary">Export PNG</button>
+    <section class="panel-block">
+      <h2>Caption</h2>
+      <label>Title <input id="capTitle" type="text" maxlength="24" value="NEON PALMS"></label>
+      <label>Subtitle <span class="script-note">script</span> <input id="capSubtitle" type="text" maxlength="40" value="one last summer"></label>
+      <label>Tagline <input id="capTagline" type="text" maxlength="60" value="CHASE THE SUN · OUTRUN THE NIGHT"></label>
+      <label>Quote <input id="capQuote" type="text" maxlength="60" value="Every sunset is a getaway."></label>
+      <div class="stars-row">
+        <span class="stars-label">Wanted stars</span>
+        <span id="starsRow" class="stars"></span>
       </div>
-      <p id="status" role="status"></p>
-      <p id="selftest-result" role="status"></p>
-    </fieldset>
+    </section>
   </section>
 
-  <section class="preview" aria-label="Cover preview">
-    <canvas id="cover" width="1080" height="1080" aria-label="The cover"></canvas>
-    <p class="hint">Drag a panel to reframe it · Scroll on the canvas to zoom the selected panel · Ctrl+Z to undo</p>
+  <section class="col col-mid" aria-label="Live cover preview">
+    <div class="preview-bar">
+      <div class="size-switch" role="group" aria-label="Preview size">
+        <button type="button" class="size-btn active" data-size="square">Square 1080×1080</button>
+        <button type="button" class="size-btn" data-size="portrait">Portrait 1080×1350</button>
+        <button type="button" class="size-btn" data-size="wide">Wide 1920×1080</button>
+      </div>
+      <p id="panelInfo" class="panel-info" role="status"></p>
+    </div>
+    <div class="preview-wrap">
+      <canvas id="cover" width="900" height="900" aria-label="The cover preview"></canvas>
+    </div>
+    <p class="hint center">Click a panel to select it · Drag its photo to move it · Scroll on it to zoom · Numbers mark the panels</p>
+  </section>
+
+  <section class="col col-right" aria-label="Export and look controls">
+    <section class="panel-block">
+      <h2>Export PNG</h2>
+      <div class="export-list">
+        <button type="button" data-export="square">Square · 1080 × 1080</button>
+        <button type="button" data-export="portrait">Portrait · 1080 × 1350</button>
+        <button type="button" data-export="wide">Wide · 1920 × 1080</button>
+        <button type="button" id="exportAll" class="primary">Export all three</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <section class="panel-block">
+      <h2>Selected panel</h2>
+      <label>Zoom <span class="range-val" data-look-out="zoom"></span>
+        <input id="panelZoom" type="range" min="1" max="2.5" step="0.01" value="1.1">
+      </label>
+      <div class="btn-row">
+        <button type="button" id="flipBtn">Flip</button>
+        <button type="button" id="swapBtn">Swap →</button>
+        <button type="button" id="faceBtn">Face</button>
+      </div>
+      <p class="hint">Flip mirrors the photo. Swap trades it with the next panel. Face aims the frame at the face.</p>
+    </section>
+
+    <section class="panel-block">
+      <h2>Look &amp; Title</h2>
+      <label>Paint <span class="range-val" data-look-out="paint">55%</span>
+        <input id="lookPaint" type="range" min="0" max="100" step="1" value="55">
+      </label>
+      <label>Grade <span class="range-val" data-look-out="grade">60%</span>
+        <input id="lookGrade" type="range" min="0" max="100" step="1" value="60">
+      </label>
+      <label>Halftone <span class="range-val" data-look-out="halftone">25%</span>
+        <input id="lookHalftone" type="range" min="0" max="100" step="1" value="25">
+      </label>
+      <label>Grain <span class="range-val" data-look-out="grain">30%</span>
+        <input id="lookGrain" type="range" min="0" max="100" step="1" value="30">
+      </label>
+      <label>Glow <span class="range-val" data-look-out="glow">45%</span>
+        <input id="lookGlow" type="range" min="0" max="100" step="1" value="45">
+      </label>
+    </section>
+
+    <section class="panel-block about">
+      <h2>About</h2>
+      <p>NEON PALMS turns your own photos into a Leonida-style multi-panel cover: hero portrait, neon nights, golden-hour grades, and a big 3D title over the seam. Original art only — no Rockstar logos, artwork or fonts. Anton &amp; Pacifico ship under the SIL Open Font License.</p>
+    </section>
   </section>
 </main>
 <script type="module" src="./src/main.js"></script>
