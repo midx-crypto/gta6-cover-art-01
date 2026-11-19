@@ -11,7 +11,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
@@ -23,6 +23,57 @@ mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+
+// --- Round 4 addition: build summary + input validation (written for this rebuild) ---
+// Reads the copied app/ and screenshots/ in the output dir and prints a short,
+// deterministic report. It is read-only (it writes no files), so running the build
+// twice still produces byte-identical dossiers. It fails fast instead of handing
+// the judge a dossier built from a half-copied tree.
+function summarizeBuild(outputDir: string): void {
+  const appDir = join(outputDir, 'app');
+  const shotDir = join(outputDir, 'screenshots');
+  const lines: string[] = [];
+  const requiredApp = [
+    'index.html',
+    'style.css',
+    'src/main.js',
+    'src/cover.js',
+    'src/shots.js',
+    'fonts/Anton-Regular.ttf',
+    'fonts/Pacifico-Regular.ttf',
+    'fonts/OFL.txt',
+  ];
+  const missing = requiredApp.filter((rel) => !existsSync(join(appDir, rel)));
+  lines.push(`app files present: ${requiredApp.length - missing.length}/${requiredApp.length}`);
+  if (missing.length > 0) lines.push(`MISSING app files: ${missing.join(', ')}`);
+  const sampleNames = readdirSync(join(appDir, 'samples'))
+    .filter((name) => name.endsWith('.jpg'))
+    .sort();
+  lines.push(`sample photos: ${sampleNames.length} (${sampleNames.join(', ')})`);
+  const shotNames = existsSync(shotDir)
+    ? readdirSync(shotDir).filter((name) => name.endsWith('.jpg')).sort()
+    : [];
+  const oversize: string[] = [];
+  let shotBytes = 0;
+  for (const name of shotNames) {
+    const size = statSync(join(shotDir, name)).size;
+    shotBytes += size;
+    if (size > 262144) oversize.push(`${name} (${size} bytes)`);
+  }
+  lines.push(`screenshots: ${shotNames.length} (${shotNames.join(', ')}) totalling ${shotBytes} bytes`);
+  if (oversize.length > 0) lines.push(`OVERSIZE screenshots: ${oversize.join(', ')}`);
+  const indexBytes = statSync(join(appDir, 'index.html')).size;
+  lines.push(`app/index.html: ${indexBytes} bytes`);
+  console.log(['--- Vice Cover Studio build summary ---', ...lines, '--- end summary ---'].join('\n'));
+  const problems = [
+    ...missing.map((name) => `missing ${name}`),
+    ...oversize,
+    ...(shotNames.length === 0 ? ['no screenshots'] : []),
+  ];
+  if (problems.length > 0) throw new Error(`build summary found problems: ${problems.join('; ')}`);
+}
+
+summarizeBuild(out);
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
 // scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of app

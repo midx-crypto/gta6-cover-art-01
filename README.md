@@ -1,23 +1,45 @@
-# gta6-cover-art-01
+# Vice Cover Studio — Make GTA 6 Cover Art
 
-[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
-[![rank](https://make.fun/badge/gta6-cover-art-01/midx-crypto/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
-[![reward](https://make.fun/badge/gta6-cover-art-01/midx-crypto/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![make.fun](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/midx-crypto/gta6-cover-art-01/rank.svg)](https://make.fun/bounty/gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/midx-crypto/gta6-cover-art-01/reward.svg)](https://make.fun/bounty/gta6-cover-art-01)
 
-Vice Cover Studio is an offline browser app that turns any photo into GTA 6-style cover art: the iconic multi-panel Vice City poster look, with a giant 3D gradient title, a script subtitle, stars and a quote, per-panel place and time labels, a gold seal, a WANTED pill, a collector's edition ribbon and a bottom strip. Pick from 6 layouts and 5 colour grades, drag and zoom each photo to crop it, upload your own photos, and export the cover as a PNG in 1080x1080, 1080x1350 or 1920x1080. Everything runs locally in the browser; no photo ever leaves the machine.
+An entry for [Make GTA 6 Cover Art](https://make.fun/bounty/gta6-cover-art-01) on make.fun — a free, offline browser app that turns any photo into GTA 6-style cover art: a multi-panel Vice City poster with a giant 3D gradient title, neon script subtitle, place/time labels, stars, quote, seal badge, WANTED pill and a collector's bottom strip, exported as a share-ready PNG.
+
+Referral code: `g5h40b4t`
+
+## What it does
+
+- **6 layouts**: Hero Top, Hero Left, Slash Cut, Three Panel, Four Square, Portrait Stack
+- **5 colour grades**: Vice Sunset, Neon Night, Gold Hour, Magenta Dusk, Teal Noir
+- **Giant 3D title** in Anton with a gradient fill, plus a Pacifico script subtitle
+- **Per-panel labels**: place, time and tagline on every panel
+- **Badges**: seal badge, WANTED pill, VOL. 06, COLLECTOR'S EDITION, stars + quote strip
+- **Crop per panel**: drag a panel to reframe it, scroll to zoom, or use the zoom slider
+- **Your photos**: upload local photos, or use the 6 built-in samples (4 made for this entry, 2 from the starter kit)
+- **Undo** (button or Ctrl+Z) and **export** to PNG in 1080×1080, 1080×1350 or 1920×1080
 
 ## Run it
 
 ```sh
-node serve.ts --port 8083
+node serve.ts
 ```
 
-Then open http://localhost:8083 in a desktop browser. To build the submission dossier:
+Then open http://localhost:8080. Everything runs locally in the browser — no network requests, no uploads, no account.
+
+## Screenshots
+
+The cover (Hero Top, Vice Sunset), the editor (Four Square, Neon Night), a portrait cover (Portrait Stack, Magenta Dusk) and a square cover (Three Panel, Gold Hour) live in `screenshots/`.
+
+## Build the dossier
 
 ```sh
-MAKEFUN_OUTPUT_DIR=out node main.ts
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
----
+This copies `app/` and `screenshots/` into the output dir, prints a build summary, and writes `dossier.json` with the vendored make.fun library.
 
-Entered on [make.fun](https://make.fun/?ref=g5h40b4t&utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards
+## Fonts and photos
+
+- Anton and Pacifico are licensed under the SIL Open Font License 1.1 (see `app/fonts/OFL.txt`).
+- The four photos `convertible.jpg`, `neon-portrait.jpg`, `coast-road.jpg` and `gas-station.jpg` in `app/samples/` were generated for this entry with an image model; `boulevard.jpg` and `pier.jpg` come from the starter kit.

@@ -3,68 +3,92 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vice Cover Studio — GTA 6-style Cover Art Maker</title>
+<title>Vice Cover Studio — GTA 6-style cover art maker</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <span class="brand-mark">&#9733;</span>
-    <div>
-      <strong>VICE COVER STUDIO</strong>
-      <span class="brand-sub">GTA 6-style multi-panel cover art maker</span>
-    </div>
-  </div>
-  <div class="top-actions">
-    <button id="undo" type="button" title="Undo (Ctrl+Z)">&#8617; Undo</button>
-    <button id="export" type="button" class="primary">Export PNG</button>
-  </div>
+  <div class="brand"><span class="brand-mark">VC</span> VICE COVER STUDIO</div>
+  <p class="tagline">Build your own GTA 6-style cover art — multi-panel collage, giant 3D title, neon grades.</p>
 </header>
 <main class="app">
-  <aside class="controls" aria-label="Cover controls">
-    <section>
-      <h2>Layout</h2>
-      <div id="layouts" class="chips" role="group" aria-label="Layout"></div>
-    </section>
-    <section>
-      <h2>Colour grade</h2>
-      <div id="grades" class="swatches" role="group" aria-label="Colour grade"></div>
-    </section>
-    <section>
-      <h2>Title</h2>
-      <label>Big title <input id="title" type="text" maxlength="24" value="VICE CITY"></label>
-      <label>Script subtitle <input id="subtitle" type="text" maxlength="32" value="Neon Nights"></label>
-      <label>Quote <input id="quote" type="text" maxlength="90" value="The city never sleeps, and neither do we."></label>
-      <label>Stars <span class="range-row"><input id="stars" type="range" min="0" max="5" step="1" value="5"><output id="starsOut">5 / 5</output></span></label>
-      <label>Volume <input id="vol" type="text" maxlength="12" value="VOL. 06"></label>
-    </section>
-    <section>
-      <h2>Badges</h2>
-      <label class="check"><input id="wanted" type="checkbox" checked> WANTED pill</label>
-      <label class="check"><input id="seal" type="checkbox" checked> Gold seal badge</label>
-      <label class="check"><input id="strip" type="checkbox" checked> Collector ribbon + bottom strip</label>
-    </section>
-    <section>
-      <h2>Selected panel</h2>
-      <p id="panelLabel" class="panel-label">Panel 1 of 3</p>
-      <div id="thumbs" class="thumbs" role="group" aria-label="Sample photos"></div>
-      <label class="upload-btn">Upload your own photo
-        <input id="upload" type="file" accept="image/*" hidden>
+  <section class="controls" aria-label="Cover controls">
+    <h1>Make your cover</h1>
+
+    <fieldset>
+      <legend>Layout</legend>
+      <div class="btn-row">
+        <button type="button" data-layout="hero-top">Hero Top</button>
+        <button type="button" data-layout="hero-left">Hero Left</button>
+        <button type="button" data-layout="slash">Slash Cut</button>
+        <button type="button" data-layout="three-panel">Three Panel</button>
+        <button type="button" data-layout="four-square">Four Square</button>
+        <button type="button" data-layout="portrait-stack">Portrait Stack</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colour grade</legend>
+      <div class="btn-row">
+        <button type="button" data-grade="sunset">Vice Sunset</button>
+        <button type="button" data-grade="neon">Neon Night</button>
+        <button type="button" data-grade="gold">Gold Hour</button>
+        <button type="button" data-grade="magenta">Magenta Dusk</button>
+        <button type="button" data-grade="teal">Teal Noir</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Words</legend>
+      <label>Title <input id="title" type="text" maxlength="24" value="VICE CITY"></label>
+      <label>Subtitle (script) <input id="subtitle" type="text" maxlength="32" value="welcome back"></label>
+      <label>Quote <input id="quote" type="text" maxlength="60" value="The city never sleeps. Neither do we."></label>
+      <label>Stars
+        <select id="stars">
+          <option value="5" selected>★★★★★</option>
+          <option value="4">★★★★☆</option>
+          <option value="3">★★★☆☆</option>
+        </select>
       </label>
-      <label>Zoom <span class="range-row"><input id="zoom" type="range" min="0" max="300" step="1" value="0"><output id="zoomOut">100%</output></span></label>
-      <button id="resetCrop" type="button">Reset crop</button>
-      <p class="hint">Click a panel to select it. Drag a panel to move the photo, scroll to zoom.</p>
-    </section>
-    <section>
-      <h2>Export size</h2>
-      <select id="exportSize" aria-label="Export size"></select>
-    </section>
-    <p id="status" role="status"></p>
-    <p id="selftest" class="selftest" role="status"></p>
-  </aside>
-  <section class="stage">
-    <canvas id="cover" width="1080" height="1080" aria-label="The cover preview"></canvas>
-    <p class="stage-hint">Live preview &mdash; what you see is the exported cover.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Badges</legend>
+      <label class="check"><input id="showSeal" type="checkbox" checked> Seal badge</label>
+      <label class="check"><input id="showWanted" type="checkbox" checked> WANTED pill</label>
+      <label class="check"><input id="showVol" type="checkbox" checked> VOL. 06 badge</label>
+      <label class="check"><input id="showStrip" type="checkbox" checked> Bottom strip</label>
+      <label class="check"><input id="showQuote" type="checkbox" checked> Stars + quote</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Panels</legend>
+      <p class="hint">Click a panel to select it. Drag it on the canvas to reframe, scroll over it to zoom.</p>
+      <div id="panels"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Export</legend>
+      <label>Size
+        <select id="size">
+          <option value="1080x1080" selected>1080 × 1080 (square)</option>
+          <option value="1080x1350">1080 × 1350 (portrait)</option>
+          <option value="1920x1080">1920 × 1080 (wide)</option>
+        </select>
+      </label>
+      <div class="btn-row">
+        <button id="undo" type="button">Undo</button>
+        <button id="export" type="button" class="primary">Export PNG</button>
+      </div>
+      <p id="status" role="status"></p>
+      <p id="selftest-result" role="status"></p>
+    </fieldset>
+  </section>
+
+  <section class="preview" aria-label="Cover preview">
+    <canvas id="cover" width="1080" height="1080" aria-label="The cover"></canvas>
+    <p class="hint">Drag a panel to reframe it · Scroll on the canvas to zoom the selected panel · Ctrl+Z to undo</p>
   </section>
 </main>
 <script type="module" src="./src/main.js"></script>
